@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bridge Builder – Arithmetic Adventure</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sky:       #cce8ff;
+      --river:     #3a8fcf;
+      --river-hi:  #5aaff0;
+      --bank-near: #6bbf59;
+      --bank-far:  #4da840;
+      --plank:     #c8883a;
+      --plank-hi:  #e0a855;
+      --plank-dis: #b0a090;
+      --win-bg:    #fffbe6;
+      --win-bdr:   #f5c518;
+      --danger:    #d93025;
+      --text:      #1a1a1a;
+      --focus:     #ff6200;
+      --radius:    8px;
+    }
+
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #e8f4ff;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+
+    /* ─── Skip link ─────────────────────────────────────────────────── */
+    .skip-link {
+      position: absolute;
+      top: -999px; left: 8px;
+      background: #000; color: #fff;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      text-decoration: none;
+      font-weight: bold;
+      z-index: 9999;
+    }
+    .skip-link:focus { top: 8px; }
+
+    /* ─── SR-only live regions ──────────────────────────────────────── */
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+    }
+
+    /* ─── Page heading ──────────────────────────────────────────────── */
+    h1 {
+      font-size: clamp(1.25rem, 4vw, 1.75rem);
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    /* ─── Scoreboard ────────────────────────────────────────────────── */
+    #scoreboard {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .chip {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #fff;
+      border: 2px solid #b0c4de;
+      border-radius: var(--radius);
+      padding: 6px 18px;
+      min-width: 90px;
+    }
+    .chip-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #555;
+    }
+    .chip-value {
+      font-size: 1.8rem;
+      font-weight: 900;
+      line-height: 1.1;
+    }
+    #chip-target  .chip-value { color: #1a5fa8; }
+    #chip-total   .chip-value { color: #217a2f; }
+    #chip-need    .chip-value { color: #a82020; }
+
+    /* ─── River scene ───────────────────────────────────────────────── */
+    #scene {
+      position: relative;
+      width: min(640px, 98vw);
+      height: 180px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 2px solid #7aabcf;
+      margin-bottom: 14px;
+      background: var(--sky);
+    }
+
+    /* Sky gradient */
+    #scene::before {
+      content: "";
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, #cce8ff 0%, #a8d4f5 45%, #3a8fcf 45%);
+      z-index: 0;
+    }
+
+    /* River ripples */
+    #river-surface {
+      position: absolute;
+      left: 100px; right: 100px;
+      top: 81px; bottom: 0;
+      background: repeating-linear-gradient(
+        -35deg,
+        var(--river) 0px,
+        var(--river) 12px,
+        var(--river-hi) 12px,
+        var(--river-hi) 24px
+      );
+      z-index: 1;
+    }
+
+    /* Near bank (left) */
+    #bank-near {
+      position: absolute;
+      left: 0; top: 70px;
+      width: 108px; bottom: 0;
+      background: var(--bank-near);
+      border-right: 3px solid #3d8c2f;
+      z-index: 2;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 6px;
+    }
+    #bank-near-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #1a3d10;
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    /* Far bank (right) */
+    #bank-far {
+      position: absolute;
+      right: 0; top: 70px;
+      width: 108px; bottom: 0;
+      background: var(--bank-far);
+      border-left: 3px solid #2f7a22;
+      z-index: 2;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 6px;
+    }
+    #bank-far-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #0e2a08;
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    /* Target marker flag on far bank */
+    #target-flag {
+      position: absolute;
+      right: 22px;
+      top: 44px;
+      font-size: 1.5rem;
+      z-index: 4;
+    }
+
+    /* Bridge track (invisible baseline for planks) */
+    #bridge-track {
+      position: absolute;
+      left: 108px; right: 108px;
+      top: 96px;
+      height: 44px;
+      z-index: 3;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+    }
+
+    /* Individual bridge planks (placed) */
+    .bridge-plank {
+      height: 36px;
+      background: var(--plank);
+      border: 2px solid #8a5520;
+      border-radius: 3px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+      transition: width 0.25s ease;
+    }
+
+    /* Character (person crossing) */
+    #character {
+      position: absolute;
+      top: 60px;
+      font-size: 1.6rem;
+      z-index: 5;
+      transition: left 0.4s ease;
+      /* set via JS */
+    }
+    #character[aria-label] { cursor: default; }
+
+    /* ─── Animations ────────────────────────────────────────────────── */
+    @keyframes bounce-reject {
+      0%   { transform: translateX(0) scale(1); }
+      15%  { transform: translateX(-10px) scale(1.15); }
+      35%  { transform: translateX(10px) scale(0.9); }
+      55%  { transform: translateX(-6px) scale(1.05); }
+      75%  { transform: translateX(5px) scale(0.97); }
+      90%  { transform: translateX(-2px); }
+      100% { transform: translateX(0) scale(1); }
+    }
+
+    @keyframes cross-bridge {
+      from { left: var(--char-start); }
+      to   { left: var(--char-end); }
+    }
+
+    @keyframes pop-in {
+      from { transform: scale(0.5) translateY(20px); opacity: 0; }
+      to   { transform: scale(1) translateY(0);      opacity: 1; }
+    }
+
+    @keyframes ripple {
+      0%   { transform: scaleX(1); opacity: 0.8; }
+      100% { transform: scaleX(1.4); opacity: 0; }
+    }
+
+    .anim-bounce { animation: bounce-reject 0.55s ease both; }
+    .anim-cross  { animation: cross-bridge 1.8s ease forwards; }
+
+    /* Respect reduced-motion preferences */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* ─── Plank shelf ───────────────────────────────────────────────── */
+    #shelf-section {
+      width: min(640px, 98vw);
+      margin-bottom: 14px;
+    }
+    #shelf-heading {
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #333;
+    }
+    #plank-shelf {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    /* Shelf plank buttons */
+    .plank-btn {
+      width: 54px; height: 54px;
+      border: 3px solid #8a5520;
+      border-radius: var(--radius);
+      background: var(--plank);
+      color: #fff;
+      font-size: 1.3rem;
+      font-weight: 900;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      position: relative;
+    }
+    .plank-btn:hover:not(:disabled) {
+      background: var(--plank-hi);
+      transform: translateY(-3px);
+    }
+    .plank-btn:focus-visible {
+      outline: 4px solid var(--focus);
+      outline-offset: 3px;
+    }
+    .plank-btn:disabled {
+      background: var(--plank-dis);
+      border-color: #9a9090;
+      color: #fff;
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+    /* Danger highlight: would cause overshoot */
+    .plank-btn.too-big {
+      border-color: var(--danger);
+      background: #c84040;
+    }
+    .plank-btn.too-big:hover:not(:disabled) {
+      background: #e05050;
+    }
+
+    /* ─── Controls ──────────────────────────────────────────────────── */
+    #controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .ctrl-btn {
+      padding: 10px 22px;
+      border-radius: var(--radius);
+      border: 2px solid #555;
+      background: #fff;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .ctrl-btn:hover { background: #f0f0f0; transform: translateY(-1px); }
+    .ctrl-btn:focus-visible {
+      outline: 4px solid var(--focus);
+      outline-offset: 3px;
+    }
+    #btn-new   { background: #1a5fa8; color: #fff; border-color: #0e3d6e; }
+    #btn-new:hover { background: #1670c0; }
+    #btn-reset { background: #fff; color: #a82020; border-color: #a82020; }
+    #btn-reset:hover { background: #fff0f0; }
+
+    /* ─── Impossible-state alert ────────────────────────────────────── */
+    #stuck-alert {
+      display: none;
+      width: min(640px, 98vw);
+      background: #fff3cd;
+      border: 2px solid #f5c518;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    #stuck-alert.visible { display: block; }
+
+    /* ─── Win overlay ───────────────────────────────────────────────── */
+    #win-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    #win-overlay.visible { display: flex; }
+    #win-dialog {
+      background: var(--win-bg);
+      border: 4px solid var(--win-bdr);
+      border-radius: 16px;
+      padding: 28px 32px;
+      max-width: 380px;
+      width: 90%;
+      text-align: center;
+      animation: pop-in 0.35s ease both;
+    }
+    #win-dialog h2 { font-size: 1.6rem; margin-bottom: 6px; }
+    #win-dialog p  { font-size: 1rem; margin-bottom: 18px; color: #333; }
+    #win-emoji     { font-size: 3rem; display: block; margin-bottom: 8px; }
+    #btn-play-again {
+      padding: 12px 28px;
+      font-size: 1rem;
+      font-weight: 700;
+      border-radius: var(--radius);
+      border: 2px solid #0e3d6e;
+      background: #1a5fa8;
+      color: #fff;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    #btn-play-again:focus-visible {
+      outline: 4px solid var(--focus);
+      outline-offset: 3px;
+    }
+    #btn-play-again:hover { background: #1670c0; }
+
+    /* ─── Instructions ──────────────────────────────────────────────── */
+    #instructions {
+      width: min(640px, 98vw);
+      background: #fff;
+      border: 1px solid #c0d4ea;
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 0.82rem;
+      color: #444;
+      line-height: 1.55;
+    }
+    #instructions h2 {
+      font-size: 0.88rem;
+      margin-bottom: 6px;
+      color: #1a1a1a;
+    }
+    #instructions kbd {
+      background: #eee;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: monospace;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Skip nav -->
+  <a href="#plank-shelf" class="skip-link">Skip to plank shelf</a>
+
+  <!-- ARIA live regions (screen reader announcements) -->
+  <div id="sr-polite"    aria-live="polite"    aria-atomic="true" class="sr-only"></div>
+  <div id="sr-assertive" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
+
+  <h1>🌉 Bridge Builder</h1>
+  <p style="text-align:center;margin-bottom:14px;font-size:0.9rem;color:#444;">
+    Pick numbered planks to reach the target — no more, no less!
+  </p>
+
+  <!-- Scoreboard -->
+  <div id="scoreboard" aria-label="Game status" role="region">
+    <div class="chip" id="chip-target">
+      <span class="chip-label">Target</span>
+      <span class="chip-value" id="val-target" aria-live="polite">–</span>
+    </div>
+    <div class="chip" id="chip-total">
+      <span class="chip-label">Total so far</span>
+      <span class="chip-value" id="val-total" aria-live="polite">0</span>
+    </div>
+    <div class="chip" id="chip-need">
+      <span class="chip-label">Still need</span>
+      <span class="chip-value" id="val-need" aria-live="polite">–</span>
+    </div>
+  </div>
+
+  <!-- River scene -->
+  <div id="scene" role="img" aria-label="River scene. Character stands on the near bank. The far bank shows the target number flag.">
+    <div id="river-surface" aria-hidden="true"></div>
+
+    <div id="bank-near" aria-hidden="true">
+      <span id="bank-near-label">Start<br>🏠</span>
+    </div>
+
+    <div id="bank-far" aria-hidden="true">
+      <span id="bank-far-label">Goal<br>🏁</span>
+    </div>
+
+    <div id="target-flag" aria-hidden="true">🚩</div>
+
+    <!-- Bridge planks appear here -->
+    <div id="bridge-track" aria-hidden="true"></div>
+
+    <!-- Character -->
+    <div id="character" aria-hidden="true" style="left:62px;">🧒</div>
+  </div>
+
+  <!-- Stuck / impossible state alert -->
+  <div id="stuck-alert" role="status" aria-live="polite">
+    ⚠️ No remaining planks can fit without going over! Press <strong>Reset Bridge</strong> to try again.
+  </div>
+
+  <!-- Plank shelf -->
+  <section id="shelf-section" aria-labelledby="shelf-heading">
+    <p id="shelf-heading">Plank shelf — choose a plank to place on the bridge:</p>
+    <div id="plank-shelf" role="group" aria-label="Available planks">
+      <!-- buttons injected by JS -->
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <div id="controls" role="group" aria-label="Game controls">
+    <button class="ctrl-btn" id="btn-new"   type="button">New Game</button>
+    <button class="ctrl-btn" id="btn-reset" type="button">Reset Bridge</button>
+  </div>
+
+  <!-- Win overlay -->
+  <div id="win-overlay" role="alertdialog" aria-modal="true" aria-labelledby="win-title" aria-describedby="win-desc">
+    <div id="win-dialog">
+      <span id="win-emoji" aria-hidden="true">🎉</span>
+      <h2 id="win-title">Bridge Complete!</h2>
+      <p id="win-desc">You built the bridge and crossed the river!</p>
+      <button id="btn-play-again" type="button">Play Again</button>
+    </div>
+  </div>
+
+  <!-- Instructions -->
+  <aside id="instructions">
+    <h2>How to play</h2>
+    <p>
+      Use <kbd>Tab</kbd> to move between planks, then press <kbd>Enter</kbd> or
+      <kbd>Space</kbd> to place a plank on the bridge. Each plank's number is added
+      to your running total. Reach the <strong>target number exactly</strong> to
+      complete the bridge and send your character across!
+    </p>
+    <p style="margin-top:6px;">
+      If a plank would push you over the target it will bounce back — pick a
+      smaller one. Press <kbd>R</kbd> to reset the bridge or <kbd>N</kbd> for a
+      new game at any time.
+    </p>
+  </aside>
+
+  <script>
+    /* ═══════════════════════════════════════════════════════════════
+       Bridge Builder — fully accessible arithmetic game
+       WCAG 2.1 AA · keyboard-only · ARIA live regions · no canvas
+    ═══════════════════════════════════════════════════════════════ */
+
+    // ── DOM refs ────────────────────────────────────────────────────
+    const elPolite     = document.getElementById('sr-polite');
+    const elAssertive  = document.getElementById('sr-assertive');
+    const elTarget     = document.getElementById('val-target');
+    const elTotal      = document.getElementById('val-total');
+    const elNeed       = document.getElementById('val-need');
+    const elScene      = document.getElementById('scene');
+    const elTrack      = document.getElementById('bridge-track');
+    const elCharacter  = document.getElementById('character');
+    const elShelf      = document.getElementById('plank-shelf');
+    const elStuck      = document.getElementById('stuck-alert');
+    const elOverlay    = document.getElementById('win-overlay');
+    const elWinDesc    = document.getElementById('win-desc');
+    const btnNew       = document.getElementById('btn-new');
+    const btnReset     = document.getElementById('btn-reset');
+    const btnPlayAgain = document.getElementById('btn-play-again');
+
+    // ── Game state ──────────────────────────────────────────────────
+    let state = {
+      target:   0,
+      total:    0,
+      placed:   [],    // values placed so far (in order)
+      shuffled: [],    // remaining shuffled values [1..10]
+      active:   false,
+      won:      false,
+    };
+
+    // ── Utility: announce to screen readers ─────────────────────────
+    function announce(msg, urgent = false) {
+      const el = urgent ? elAssertive : elPolite;
+      // Clear then set on next frame so repeated messages re-trigger
+      el.textContent = '';
+      requestAnimationFrame(() => { el.textContent = msg; });
+    }
+
+    // ── Utility: shuffle array (Fisher-Yates) ───────────────────────
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // ── Utility: random int [min, max] ──────────────────────────────
+    function randInt(min, max) {
+      return min + Math.floor(Math.random() * (max - min + 1));
+    }
+
+    // ── Track geometry helpers ──────────────────────────────────────
+    function trackWidth() {
+      return elTrack.offsetWidth || 424;  // fallback for zero layout
+    }
+    function sceneWidth() {
+      return elScene.offsetWidth || 640;
+    }
+
+    // ── Character position (px from scene left edge) ─────────────────
+    // Near bank right edge ≈ 108px, far bank left edge ≈ scene - 108px
+    // Character width ≈ 26px so centre it
+    function charX() {
+      const sw = sceneWidth();
+      const startX = 70;               // resting on near bank
+      const endX   = sw - 108 + 8;    // just onto far bank
+      const ratio  = state.total / state.target;
+      return Math.round(startX + ratio * (endX - startX));
+    }
+
+    // ── Update scoreboard display ────────────────────────────────────
+    function updateScoreboard() {
+      elTarget.textContent = state.target;
+      elTotal.textContent  = state.total;
+      const need = state.target - state.total;
+      elNeed.textContent   = need >= 0 ? need : '—';
+    }
+
+    // ── Render planks on bridge track ───────────────────────────────
+    function renderBridge() {
+      elTrack.innerHTML = '';
+      const tw = trackWidth();
+      state.placed.forEach(val => {
+        const div = document.createElement('div');
+        div.className = 'bridge-plank';
+        // Proportional width: value/target * trackWidth, min 28px
+        const w = Math.max(28, Math.round((val / state.target) * tw));
+        div.style.width = w + 'px';
+        div.textContent = val;
+        elTrack.appendChild(div);
+      });
+    }
+
+    // ── Move character to current position ──────────────────────────
+    function moveCharacter() {
+      elCharacter.style.left = charX() + 'px';
+      // Update scene description
+      const pct = Math.round((state.total / state.target) * 100);
+      elScene.setAttribute('aria-label',
+        `River scene. Character is ${pct}% of the way across the bridge.`
+      );
+    }
+
+    // ── Build / refresh shelf buttons ───────────────────────────────
+    function renderShelf() {
+      elShelf.innerHTML = '';
+      const need = state.target - state.total;
+      state.shuffled.forEach((val, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'plank-btn';
+        btn.type = 'button';
+        btn.textContent = val;
+
+        const wouldOvershoot = val > need;
+        if (wouldOvershoot) btn.classList.add('too-big');
+
+        // ARIA
+        btn.setAttribute('aria-label',
+          `Plank ${val}${wouldOvershoot ? ' — too large, would overshoot' : ''}`
+        );
+        btn.setAttribute('aria-setsize', state.shuffled.length);
+        btn.setAttribute('aria-posinset', idx + 1);
+
+        if (!state.active || state.won) btn.disabled = true;
+
+        btn.addEventListener('click', () => selectPlank(val, btn));
+        elShelf.appendChild(btn);
+      });
+    }
+
+    // ── Check for impossible state (no plank fits) ───────────────────
+    function checkImpossible() {
+      if (state.won || !state.active) return;
+      const need = state.target - state.total;
+      const canFit = state.shuffled.some(v => v <= need);
+      if (!canFit && state.shuffled.length > 0) {
+        elStuck.classList.add('visible');
+        announce(
+          'No remaining planks will fit without going over. Press Reset Bridge to try again.',
+          true
+        );
+        // Disable all remaining shelf buttons
+        elShelf.querySelectorAll('.plank-btn').forEach(b => { b.disabled = true; });
+      }
+    }
+
+    // ── Handle plank selection ───────────────────────────────────────
+    function selectPlank(val, btn) {
+      if (!state.active || state.won) return;
+
+      const need = state.target - state.total;
+
+      if (val > need) {
+        // ── OVERSHOOT: bounce animation, announce, keep game state ──
+        btn.classList.add('anim-bounce');
+        btn.addEventListener('animationend', () => {
+          btn.classList.remove('anim-bounce');
+          // Return focus to a usable plank
+          focusNextPlank();
+        }, { once: true });
+
+        announce(
+          `Plank ${val} is too big — it would go over by ${val - need}. ` +
+          `You still need exactly ${need} more to reach ${state.target}.`,
+          false
+        );
+        return;   // do NOT update state
+      }
+
+      // ── Valid placement ──────────────────────────────────────────
+      state.total += val;
+      state.placed.push(val);
+      // Remove from shelf pool
+      state.shuffled = state.shuffled.filter(v => v !== val);
+
+      // Update visuals
+      updateScoreboard();
+      renderBridge();
+      moveCharacter();
+
+      const stillNeed = state.target - state.total;
+
+      if (state.total === state.target) {
+        // ── WIN ───────────────────────────────────────────────────
+        triggerWin();
+      } else {
+        // Rebuild shelf (removes used plank, re-labels danger)
+        renderShelf();
+
+        announce(
+          `Selected ${val}. Current total is ${state.total}. ` +
+          `You need ${stillNeed} more to reach ${state.target}.`
+        );
+
+        focusNextPlank();
+        checkImpossible();
+      }
+    }
+
+    // ── Focus management: next available plank ────────────────────────
+    function focusNextPlank() {
+      const next = elShelf.querySelector('.plank-btn:not(:disabled)');
+      if (next) next.focus();
+      else btnReset.focus();
+    }
+
+    // ── Win sequence ─────────────────────────────────────────────────
+    function triggerWin() {
+      state.won    = true;
+      state.active = false;
+
+      // Disable shelf
+      elShelf.querySelectorAll('.plank-btn').forEach(b => { b.disabled = true; });
+      elStuck.classList.remove('visible');
+
+      // Assertive screen reader announcement
+      announce(
+        `You did it! The bridge is complete. Your character is crossing to the far bank. Target was ${state.target}.`,
+        true
+      );
+
+      // CSS crossing animation on character emoji
+      const sw = sceneWidth();
+      const startPx = charX() + 'px';
+      const endPx   = (sw - 108 + 8) + 'px';
+
+      // Only apply CSS animation if reduced-motion not requested
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!reducedMotion) {
+        elCharacter.style.setProperty('--char-start', startPx);
+        elCharacter.style.setProperty('--char-end',   endPx);
+        elCharacter.classList.add('anim-cross');
+      } else {
+        elCharacter.style.left = endPx;
+      }
+
+      // Show win dialog after crossing delay
+      const delay = reducedMotion ? 100 : 2000;
+      setTimeout(() => {
+        elCharacter.style.left = endPx;
+        elOverlay.classList.add('visible');
+        btnPlayAgain.focus();
+        elWinDesc.textContent =
+          `You built a bridge of ${state.placed.join(' + ')} = ${state.target}. Brilliant!`;
+      }, delay);
+    }
+
+    // ── New game ─────────────────────────────────────────────────────
+    function newGame() {
+      // Clear win overlay
+      elOverlay.classList.remove('visible');
+      elStuck.classList.remove('visible');
+
+      // Generate target 10–20
+      const target   = randInt(10, 20);
+      const shuffled = shuffle([1,2,3,4,5,6,7,8,9,10]);
+
+      state = {
+        target,
+        total:    0,
+        placed:   [],
+        shuffled,
+        active:   true,
+        won:      false,
+      };
+
+      // Reset character animation class
+      elCharacter.classList.remove('anim-cross');
+      elCharacter.style.left = '70px';
+      elScene.setAttribute('aria-label',
+        'River scene. Character stands on the near bank ready to cross.'
+      );
+
+      // Reset bridge track
+      elTrack.innerHTML = '';
+
+      updateScoreboard();
+      renderShelf();
+
+      announce(
+        `New game! Target number is ${target}. Pick planks from the shelf to build a bridge. ` +
+        `You have planks numbered 1 through 10.`,
+        true
+      );
+
+      // Focus first plank
+      requestAnimationFrame(() => {
+        const first = elShelf.querySelector('.plank-btn:not(:disabled)');
+        if (first) first.focus();
+      });
+    }
+
+    // ── Reset bridge (keep same target, put planks back) ─────────────
+    function resetBridge() {
+      if (!state.target) return;
+
+      elStuck.classList.remove('visible');
+      elOverlay.classList.remove('visible');
+      elCharacter.classList.remove('anim-cross');
+
+      // Restore all planks (shuffle again so order changes)
+      state.total    = 0;
+      state.placed   = [];
+      state.shuffled = shuffle([1,2,3,4,5,6,7,8,9,10]);
+      state.active   = true;
+      state.won      = false;
+
+      elCharacter.style.left = '70px';
+      elTrack.innerHTML = '';
+
+      updateScoreboard();
+      renderShelf();
+
+      announce(
+        `Bridge reset. Target is still ${state.target}. You have planks 1 through 10 again.`
+      );
+
+      requestAnimationFrame(() => {
+        const first = elShelf.querySelector('.plank-btn:not(:disabled)');
+        if (first) first.focus();
+      });
+    }
+
+    // ── Keyboard shortcuts (global) ───────────────────────────────────
+    document.addEventListener('keydown', e => {
+      // Ignore if focus is inside an input / textarea
+      if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+
+      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); newGame(); }
+      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); resetBridge(); }
+
+      // Escape closes win overlay = new game
+      if (e.key === 'Escape' && elOverlay.classList.contains('visible')) {
+        e.preventDefault();
+        newGame();
+      }
+    });
+
+    // ── Keyboard trap inside win overlay ─────────────────────────────
+    elOverlay.addEventListener('keydown', e => {
+      // Only one focusable item (btnPlayAgain) — keep focus there
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        btnPlayAgain.focus();
+      }
+    });
+
+    // ── Button event listeners ────────────────────────────────────────
+    btnNew.addEventListener('click', newGame);
+    btnReset.addEventListener('click', resetBridge);
+    btnPlayAgain.addEventListener('click', newGame);
+
+    // ── Start first game on load ──────────────────────────────────────
+    newGame();
+  </script>
+</body>
+</html>
